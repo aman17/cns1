@@ -35,13 +35,32 @@ class liveConnect(QtCore.QThread):
  		return
 
 
-'''class archiveThread(QtCore.QThread):
+class archiveThread(QtCore.QThread):
 	def __init__(self,sockt,tcp):
 		QtCore.QThread.__init__(self)
-			self.sockt = sockt
+		self.sockt = sockt
 		self.tcp = tcp
  	def run(self):
- 		return'''
+ 		self.tcp.send("archive")
+ 		self.tcp.recv(1024)
+ 		while True:
+ 			c = cv2.waitKey(1) & 0xFF
+			d = self.sockt.recvfrom(65536)
+			data = d[0]
+			addr = d[1]
+			print addr
+			self.emit(QtCore.SIGNAL('display'),data)
+			#buf = pickle.loads(data)
+			#print buf
+			#frame = cv2.imdecode(buf,0)
+			#print frame
+			#cv2.imshow('serverRecieving',frame)
+			if c==ord('q'):
+				break
+	 	print "oner"
+ 		return
+
+ 		return
 
 
 class TestApp(QtGui.QMainWindow):
@@ -56,7 +75,7 @@ class TestApp(QtGui.QMainWindow):
 		#self.connect(self.ui.btnArchives, QtCore.SIGNAL("clicked()"), self.buttonFn_2)
 		
 		self.MCAST_GRP = '224.1.1.1'
-		self.MCAST_PORT = 5009
+		self.MCAST_PORT = 5011
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 		self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		self.sock.bind(('', self.MCAST_PORT))
@@ -64,7 +83,7 @@ class TestApp(QtGui.QMainWindow):
 		self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
 		self.TCP_IP = '127.0.0.1'
-		self.TCP_PORT = 5051
+		self.TCP_PORT = 5053
 		self.BUFFER_SIZE_TCP = 20
 		self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.s.connect((self.TCP_IP, self.TCP_PORT))
@@ -77,7 +96,9 @@ class TestApp(QtGui.QMainWindow):
 		#print frame
 
 	def archive(self):
-		print "aman"
+		self.at = archiveThread(self.sock,self.s)
+		self.connect(self.at,QtCore.SIGNAL('display'),self.disp)
+		self.at.start()
 
 	def live(self):
 		self.lc = liveConnect(self.sock,self.s)
