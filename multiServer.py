@@ -11,9 +11,12 @@ import numpy as np
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 
 cap = cv2.VideoCapture(-1) 
-#cap = cv2.VideoCapture('output.avi')
+capRead = cv2.VideoCapture('output.avi')
 cap.set(3,160)
 cap.set(4,120)
+capRead.set(3,160)
+capRead.set(4,120)
+
 # Define the codec and create VideoWriter object
 #fourcc = cv.CV_FOURCC('X','V','I','D')
 #out = cv2.VideoWriter('output.avi',fourcc, 20.0, (160,120))
@@ -31,6 +34,9 @@ class RecvThreadTcp(QtCore.QThread):
  		self.conn.send("ack")
  		if read=="live":
  			self.emit(QtCore.SIGNAL('StartSending'))
+ 		elif read=="archive":
+ 			print "it is archive"
+ 			self.emit(QtCore.SIGNAL('StartSendingArchived'))
  		return
 
 class CameraCapture(QtCore.QThread):
@@ -54,6 +60,28 @@ class CameraCapture(QtCore.QThread):
 	 			break
 	 	print "oner"
  		return
+class VideoRead(QtCore.QThread):
+	def __init__(self):
+		QtCore.QThread.__init__(self)
+ 	def run(self):
+ 		while True:
+ 			ret, frame = capRead.read()
+ 			print frame
+ 			if ret:
+	 			#out.write(frame)
+				#print "aman",frame
+				(retval,buf) = cv2.imencode(".jpg",frame)
+				ser = pickle.dumps(buf)
+	 			self.emit(QtCore.SIGNAL('vidSend'),ser)
+	 			c = cv2.waitKey(50) & 0xFF
+	 			if c==ord('q'):
+	 				break
+	 		else:
+	 			print "break"
+	 			break
+	 	print "oner"
+ 		return
+
 class TestApp(QtGui.QMainWindow):
 	def __init__(self):
 		print "check check"
@@ -64,20 +92,20 @@ class TestApp(QtGui.QMainWindow):
 		self.connect(self.ui.pushButton, QtCore.SIGNAL("clicked()"), self.buttonFn)
 		self.connect(self.ui.pushButton_2, QtCore.SIGNAL("clicked()"), self.buttonFn_2)
 
-
 		self.MCAST_GRP = '224.1.1.1'
-		self.MCAST_PORT = 5009
+		self.MCAST_PORT = 5011
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 		self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
 
 
 		self.TCP_IP = '127.0.0.1'
-		self.TCP_PORT = 5051
+		self.TCP_PORT = 5053
 		self.BUFFER_SIZE_TCP = 20
 		self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.s.bind((self.TCP_IP, self.TCP_PORT))
 		self.rcv = RecvThreadTcp(self.s)
 		self.connect(self.rcv,QtCore.SIGNAL('StartSending'),self.buttonFn)
+		self.connect(self.rcv,QtCore.SIGNAL('StartSendingArchived'),self.vidSending)
 		self.rcv.start()
 	def runCap(self,text):
 		#print text
@@ -89,7 +117,19 @@ class TestApp(QtGui.QMainWindow):
 			
 		self.sock.sendto(text, (self.MCAST_GRP, self.MCAST_PORT))
 		#cv2.imshow('showint',frame)
-
+	def vSend(self,text1):
+		buff = pickle.loads(text1)
+		
+		frame = cv2.imdecode(buff,0)
+		#print frame
+		cv2.imshow('serverSending',frame)
+			
+		self.sock.sendto(text, (self.MCAST_GRP, self.MCAST_PORT))
+		
+	def vidSending(self):
+		self.sending = VideoRead()
+		self.connect(self.sending,QtCore.SIGNAL('vidSend'),self.vSend)
+		self.sending.start()
 	def buttonFn(self):
 		self.capture = CameraCapture()
 		self.connect(self.capture,QtCore.SIGNAL('captureNow'),self.runCap)
