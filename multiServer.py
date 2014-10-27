@@ -6,15 +6,32 @@ import cv2
 import cv2.cv as cv
 import pickle
 import socket
-import struct	
+import struct
+import numpy as np
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 
 cap = cv2.VideoCapture(-1) 
+#cap = cv2.VideoCapture('output.avi')
 cap.set(3,160)
 cap.set(4,120)
+# Define the codec and create VideoWriter object
+#fourcc = cv.CV_FOURCC('X','V','I','D')
+#out = cv2.VideoWriter('output.avi',fourcc, 20.0, (160,120))
 
 q = Queue()
-frameQueue = Queue()
+class RecvThreadTcp(QtCore.QThread):
+	def __init__(self, tcp):
+		QtCore.QThread.__init__(self)
+		self.tcp = tcp
+ 	def run(self):
+ 		self.tcp.listen(1)
+ 		self.conn, self.addr = self.tcp.accept()
+ 		read = self.conn.recv(1024)
+ 		print read
+ 		self.conn.send("ack")
+ 		if read=="live":
+ 			self.emit(QtCore.SIGNAL('StartSending'))
+ 		return
 
 class CameraCapture(QtCore.QThread):
 	def __init__(self):
@@ -22,20 +39,21 @@ class CameraCapture(QtCore.QThread):
  	def run(self):
  		while True:
  			ret, frame = cap.read()
-			#print "aman",frame
-			(retval,buf) = cv2.imencode(".jpg",frame)
-			ser = pickle.dumps(buf)
-	 		self.emit(QtCore.SIGNAL('captureNow'),ser)
-	 		c = cv2.waitKey(1) & 0xFF
-	 		if c==ord('q'):
+ 			print frame
+ 			if ret:
+	 			#out.write(frame)
+				#print "aman",frame
+				(retval,buf) = cv2.imencode(".jpg",frame)
+				ser = pickle.dumps(buf)
+	 			self.emit(QtCore.SIGNAL('captureNow'),ser)
+	 			c = cv2.waitKey(50) & 0xFF
+	 			if c==ord('q'):
+	 				break
+	 		else:
+	 			print "break"
 	 			break
+	 	print "oner"
  		return
-		'''for i in range(6):
-			time.sleep(0.3) # artificial time delay
-			self.emit( QtCore.SIGNAL('anysignal'), "from work thread " + str(i) )
-  		return'''
- 
-
 class TestApp(QtGui.QMainWindow):
 	def __init__(self):
 		print "check check"
@@ -46,12 +64,29 @@ class TestApp(QtGui.QMainWindow):
 		self.connect(self.ui.pushButton, QtCore.SIGNAL("clicked()"), self.buttonFn)
 		self.connect(self.ui.pushButton_2, QtCore.SIGNAL("clicked()"), self.buttonFn_2)
 
+
+		self.MCAST_GRP = '224.1.1.1'
+		self.MCAST_PORT = 5009
+		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+		self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+
+
+		self.TCP_IP = '127.0.0.1'
+		self.TCP_PORT = 5051
+		self.BUFFER_SIZE_TCP = 20
+		self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.s.bind((self.TCP_IP, self.TCP_PORT))
+		self.rcv = RecvThreadTcp(self.s)
+		self.connect(self.rcv,QtCore.SIGNAL('StartSending'),self.buttonFn)
+		self.rcv.start()
 	def runCap(self,text):
-		'''ret, frame = cap.read()
-		print "aman",frame
-		(retval,buf) = cv2.imencode(".jpg",frame)
-		ser = pickle.dumps(buf)'''
 		#print text
+		buff = pickle.loads(text)
+		
+		frame = cv2.imdecode(buff,0)
+		#print frame
+		cv2.imshow('serverSending',frame)
+			
 		self.sock.sendto(text, (self.MCAST_GRP, self.MCAST_PORT))
 		#cv2.imshow('showint',frame)
 
@@ -59,63 +94,22 @@ class TestApp(QtGui.QMainWindow):
 		self.capture = CameraCapture()
 		self.connect(self.capture,QtCore.SIGNAL('captureNow'),self.runCap)
 		
- 		self.MCAST_GRP = '224.1.1.1'
+ 		'''self.MCAST_GRP = '224.1.1.1'
 		self.MCAST_PORT = 5007
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-		self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+		self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)'''
+
 		print "socket created.."
 		self.capture.start()
-	'''try:
-		t1 = Thread(target =startServer,args=(q,))
-		t1.start()
-		#thread.start_new_thread(startServer,("thread1",))
-		print "aman"
-		#return t1
-	except:
-		print "Error unable to start thread"
-	print "Checking when does it comes here... :)"
-	if not frameQueue.empty():
-			print frameQueue.get()'''
-	def buttonFn_2():
+	def buttonFn_2(self):
+		cap.release()
+		#out.release()
 		q.put(0)
 		print "entered 0 in q...."
-
-'''def startServer(in_q):
-	frameSig = showSomething()
-	frameSig.gotFrame.connect(showFrame)
-	MCAST_GRP = '224.1.1.1'
-	MCAST_PORT = 5007
-	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-	sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-	val = in_q.empty()
-	while val:
-		#ret, frame = cap.read()
-		#cam = cv.CaptureFromCAM(-1)
-		#feed = cv.QueryFrame(cam)
-		#frameSig.emmiter(feed)
-		#cv.WaitKey(-1)
-		#frameQueue.put(frame)
-		#print "frame:   ", frame
-		#cv2.imshow('clientSending',frame)
-		#c = cv2.waitKey(1) & 0xFF
-		(retval,buf) = cv2.imencode(".jpg",frame)
-		ser = pickle.dumps(buf)
-		frameQueue.put(ser)
-		frameSig.emmiter(ser)
-		#sock.sendto(ser, (MCAST_GRP, MCAST_PORT))
-		#if c == ord('q'):
-			#break
-		val = in_q.empty()
-		if val == False:
-			read = in_q.get()
-			if read ==  0:
-				break
-	cap.release()
-	cv2.destroyAllWindows()
-'''
-
-if __name__ == "__main__":
+def main():
 	app = QtGui.QApplication(sys.argv)
 	win = TestApp()
 	sys.exit(app.exec_())
-#sock.sendto("robot", (MCAST_GRP, MCAST_PORT))
+
+if __name__ == "__main__":
+	main()
