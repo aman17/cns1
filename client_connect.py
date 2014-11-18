@@ -12,6 +12,7 @@ import pickle
 import socket
 import struct
 import numpy as np
+import json
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 
 
@@ -164,14 +165,26 @@ class loginScreen(QtGui.QMainWindow):
 			s.recv(1024)
 			s.send(pwd)
 			a = s.recv(1024)
-			print " ",a[0]," ",a[1]," ",a[2]
-			login_val = a[2]
-			print login_val,"fh"
-			if login_val == 2:
+			print type(a)
+			#string = "('aman', 'agarwal', 1)"
+			'''s = a.split("('")
+			#print s[1]
+			s2 = s[1].split("'")
+			print s2[0]
+			print s2[2]
+			s1 = s2[3].split(", ")
+			sf = s1[1].split(")")
+			print sf[0]'''
+			a_new = pickle.loads(a)
+			
+			print " ",a_new[0]," ",a_new[1]," ",a_new[2]
+			login_val = a_new[2]
+			
+			if login_val == 1:
 				print "student"
 				self.ui.close()
 				self.stu = StudentGui()
-			if login_val == 1:
+			if login_val == 2:
 				self.ui.close()
 				self.tea = TeacherGui()
 
