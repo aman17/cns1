@@ -4,24 +4,126 @@ import SocketServer
 import loginCheck
 import pickle
 import json
+import cv2
+import numpy
+import cv2.cv as cv
+import sys
 
 class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
 
     def handle(self):
         data = self.request.recv(1024)
+        #print data
         cur_thread = threading.current_thread()
-        if data=="login":
-        	self.request.sendall("requesting login data")
-        	usr = self.request.recv(1024)
+        if data=="listArchive":
+            rows = loginCheck.getArchives()
+            print rows,"in listArchive"
+            self.request.sendall(pickle.dumps(rows))
+            fn = self.request.recv(1024)
+            UDP_IP = '127.0.0.1'
+            UDP_PORT = 7791
+            sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+            cap = cv2.VideoCapture(fn) 
+            #capRead = cv2.VideoCapture('output.avi')
+            cap.set(3,320)
+            cap.set(4,240)
+            while True:
+                ret, frame = cap.read()
+                print frame
+                print frame/2
+                frame = frame/2
+                if ret:
+                #out.write(frame)
+                #print "aman",frame
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    #self.out.write(frame)
+                    (retval,buf) = cv2.imencode(".jpg",gray)
+                    if retval:
+                        ser = pickle.dumps(buf)
+                        print sys.getsizeof(ser)
+                        sock.sendto(ser,(UDP_IP,UDP_PORT))
+                    cv2.waitKey(50)
+                    '''self.emit(QtCore.SIGNAL('captureNow'),ser)
+                    c = cv2.waitKey(50) & 0xFF
+                    if c==ord('q'):
+                        s = est_tcp_conn.create_tcp()
+                        s.send("delete lecture")
+                        s.recv(1024)
+                        s.send(self.fileName)
+                    #self.out.release()
+                    #cap.release()
+                        break
+                    else:
+                        print "break"
+                        break'''
+            sock.close()
+            cap.release()
+            out.release()
+        
+
+
+        if data=="sending lecture":
+            print "sending lecture wale me.."
+            self.request.sendall("ack")
+            fn = self.request.recv(8192)
+            f = open(fn,'wb')
+            l = self.request.recv(8192)
+            print "recieving.."
+            i=1
+            while len(l)>0:
+                print i
+                i=i+1
+                #print "hello"
+                #print l
+                f.write(l)
+                l = self.request.recv(1024)
+            #self.request.sendall("complete")
+            f.close()
+            loginCheck.insertNewLecture(str(fn))
+            print "finished.."
+        if data=="delete lecture":
+            self.request.sendall("ack")
+            fileName = self.request.recv(1024)
+            loginCheck.deleteLecture(fileName)
+        if data=="get teacher ip":
+        	print "teacher ip wale me.."
         	self.request.sendall("ack")
-        	pwd = self.request.recv(1024)
-        	a = loginCheck.login(usr,pwd)
-        	login_val = a[2]
-        	print login_val
-        	if(login_val==2):
-        		print "student"
-        	self.request.sendall(pickle
-        		.dumps(a))
+        	teach_id = self.request.recv(1024)
+        	ip = loginCheck.getIp(int(teach_id))
+        	self.request.sendall(ip)
+        if data=="list":
+        	print "list wale me.."
+        	#self.request.sendall("ack")
+        	rows = loginCheck.getLiveLecture()
+        	self.request.sendall(pickle.dumps(rows))
+        if data=="fileName":
+        	print "file wale me.."
+        	self.request.sendall("requesting file name")
+        	fileName = self.request.recv(1024)
+        	self.request.sendall("ack")
+        	user = self.request.recv(1024)
+        	self.request.sendall("ack")
+        	loginCheck.addFileName(fileName,user)
+        if data=="login":
+            print "login wale me.."
+            self.request.sendall("requesting login data")
+            usr = self.request.recv(1024)
+            self.request.sendall("ack")
+            pwd = self.request.recv(1024)
+            loginData = loginCheck.login(usr,pwd)
+            self.request.sendall(pickle.dumps(loginData))
+            self.request.recv(1024)
+            login_val = loginData[2]
+            print login_val
+            if(login_val==1):
+                rows = loginCheck.get_ip(loginData[0])
+                print loginData[0],"in here"
+                for row in rows:
+                    if row[0]==loginData[0]:
+                        ip = row[1]
+        		print ip,"here"
+        		self.request.sendall(ip)
+        	#pickle.dumps(ipdata)
 
 
 
@@ -30,12 +132,12 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 
 if __name__ == "__main__":
 	# Port 0 means to select an arbitrary unused port
-    HOST, PORT = "localhost", 5566
+    print "ye kya bakchodi hui???"
+    HOST, PORT = "10.100.95.33", 5596
     server = ThreadedTCPServer((HOST, PORT), ThreadedTCPRequestHandler)
     ip, port = server.server_address
     print "ip: ",ip
     print "port: ",port
-
     # Start a thread with the server -- that thread will then start one
     # more thread for each request
     server_thread = threading.Thread(target=server.serve_forever)
@@ -50,6 +152,4 @@ if __name__ == "__main__":
     		client(ip, port, "Hello World")
     	if inp == "2":
 			server.shutdown()
-			break	
-		
-		
+			break
